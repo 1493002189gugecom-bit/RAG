@@ -3,9 +3,11 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import time
 from dataclasses import dataclass
 from math import sqrt
 from urllib import request
+from urllib.error import URLError
 
 
 @dataclass
@@ -32,16 +34,26 @@ class OpenAICompatibleEmbedding:
     api_key: str
     model: str
     base_url: str = "https://api.openai.com/v1"
+    batch_size: int = 16
+    max_retries: int = 2
+    timeout_seconds: int = 60
 
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
-        return self._embed(texts)
+        vectors: list[list[float]] = []
+        for start in range(0, len(texts), self.batch_size):
+            vectors.extend(self._embed_batch(texts[start : start + self.batch_size]))
+        return vectors
 
     def embed_query(self, text: str) -> list[float]:
-        return self._embed([text])[0]
+        return self._embed_batch([text])[0]
 
-    def _embed(self, texts: list[str]) -> list[list[float]]:
+    def _embed_batch(self, texts: list[str]) -> list[list[float]]:
         if not self.api_key:
-            raise RuntimeError("缺少 OPENAI_API_KEY，请先在环境变量或 .env 文件中配置。")
+            raise RuntimeError(
+                "Missing EMBEDDING_API_KEY. Configure it in environment variables or .env."
+            )
+        if not texts:
+            return []
 
         payload = {"model": self.model, "input": texts}
         body = json.dumps(payload).encode("utf-8")
@@ -54,9 +66,21 @@ class OpenAICompatibleEmbedding:
             },
             method="POST",
         )
-        with request.urlopen(req, timeout=60) as response:
-            data = json.loads(response.read().decode("utf-8"))
-        return [item["embedding"] for item in data["data"]]
+
+        for attempt in range(self.max_retries + 1):
+            try:
+                with request.urlopen(req, timeout=self.timeout_seconds) as response:
+                    data = json.loads(response.read().decode("utf-8"))
+                return [item["embedding"] for item in data["data"]]
+            except URLError as exc:
+                if attempt >= self.max_retries:
+                    raise RuntimeError(
+                        "Embedding API request failed after retries. "
+                        "Try again, reduce uploaded document size, or disable API Embedding."
+                    ) from exc
+                time.sleep(0.8 * (attempt + 1))
+
+        raise RuntimeError("Embedding API request failed unexpectedly.")
 
 
 def _tokenize(text: str) -> list[str]:

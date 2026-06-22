@@ -30,3 +30,5 @@
 - 配置智谱 `embedding-3` 作为真实 Embedding API，base URL 为 `https://open.bigmodel.cn/api/paas/v4`。
 - 验证智谱 Embedding API 调用成功，返回 2048 维向量。
 - 使用智谱 Embedding + DeepSeek Chat 验证上传类计算机网络文档，`计算机网络分几个层？` 能正确召回并回答 OSI 七层与 TCP/IP 四层。
+- 修复 Embedding API 建库稳定性：增加分批请求、自动重试和清晰错误提示，降低 SSL 断连导致建库失败的概率。
+- 修复本地混合检索中文短术语场景：用稳定 Unicode 测试覆盖 `三次握手`，验证本地 HashEmbedding + BM25 + 关键词 + 编辑距离可以召回计算机网络文档。

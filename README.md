@@ -33,6 +33,8 @@ $env:EMBEDDING_MODEL="text-embedding-3-small"
 
 检索层现在是混合检索：向量相似度 + BM25 + 关键词匹配 + 编辑距离纠错。默认使用本地 HashEmbedding 参与向量分数；如果你配置了 `EMBEDDING_API_KEY` 和 `EMBEDDING_BASE_URL`，可以在侧边栏勾选 “Use API Embedding” 来使用真实 Embedding API。DeepSeek Chat API 不一定提供 Embedding endpoint，因此 Chat 和 Embedding 配置是分开的。
 
+Embedding API 请求支持分批和自动重试，遇到临时 SSL 断连时会重试；如果外部接口持续失败，可以取消勾选 “Use API Embedding”，系统仍会使用本地混合检索。
+
 常见配置：
 
 ```env
@@ -72,6 +74,12 @@ pytest -q
 - `怎么维修电脑硬件？`
 
 前两个问题会基于 Python 语法知识库回答，第三个问题不在知识库范围内，会触发拒答。
+
+也已验证上传计算机网络类文档后：
+- `三次握手`
+- `计算机网络分几个层？`
+
+本地混合检索和智谱 Embedding 模式均可召回相关片段。
 
 ## 目录结构
 ```text
