@@ -5,6 +5,7 @@ import json
 import re
 import time
 from dataclasses import dataclass
+from importlib import import_module
 from math import sqrt
 from urllib import request
 from urllib.error import URLError
@@ -83,6 +84,49 @@ class OpenAICompatibleEmbedding:
         raise RuntimeError("Embedding API request failed unexpectedly.")
 
 
+@dataclass
+class LocalSentenceTransformerEmbedding:
+    model_name: str = "BAAI/bge-small-zh-v1.5"
+    device: str = "auto"
+    model: object | None = None
+
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        if not texts:
+            return []
+        return self._encode(texts)
+
+    def embed_query(self, text: str) -> list[float]:
+        return self._encode([text])[0]
+
+    def preload(self) -> None:
+        self._get_model()
+
+    def _encode(self, texts: list[str]) -> list[list[float]]:
+        model = self._get_model()
+        vectors = model.encode(texts, normalize_embeddings=True)
+        return [_as_float_list(vector) for vector in vectors]
+
+    def _get_model(self):
+        if self.model is not None:
+            return self.model
+        try:
+            module = import_module("sentence_transformers")
+        except ImportError as exc:
+            raise RuntimeError(
+                "Local Embedding requires sentence-transformers. "
+                "Install it with: pip install sentence-transformers"
+            ) from exc
+
+        device = None if self.device == "auto" else self.device
+        sentence_transformer = module.SentenceTransformer
+        self.model = (
+            sentence_transformer(self.model_name)
+            if device is None
+            else sentence_transformer(self.model_name, device=device)
+        )
+        return self.model
+
+
 def _tokenize(text: str) -> list[str]:
     lowered = text.lower()
     words = re.findall(r"[a-zA-Z_]+|[\u4e00-\u9fff]", lowered)
@@ -96,3 +140,9 @@ def _normalize(vector: list[float]) -> list[float]:
     if norm == 0:
         return vector
     return [value / norm for value in vector]
+
+
+def _as_float_list(vector) -> list[float]:
+    if hasattr(vector, "tolist"):
+        vector = vector.tolist()
+    return [float(value) for value in vector]

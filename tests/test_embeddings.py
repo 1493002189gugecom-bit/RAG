@@ -106,3 +106,34 @@ def test_openai_compatible_embedding_retries_transient_url_errors(monkeypatch):
 
     assert embedding.embed_query("hello") == [0.1, 0.2]
     assert calls["count"] == 2
+
+
+def test_local_sentence_transformer_embedding_uses_injected_model():
+    from rag_agent.embeddings import LocalSentenceTransformerEmbedding
+
+    class FakeModel:
+        def encode(self, texts, normalize_embeddings):
+            assert normalize_embeddings is True
+            return [[float(len(text)), 1.0] for text in texts]
+
+    embedding = LocalSentenceTransformerEmbedding(model=FakeModel())
+
+    assert embedding.embed_query("abc") == [3.0, 1.0]
+    assert embedding.embed_documents(["a", "abcd"]) == [[1.0, 1.0], [4.0, 1.0]]
+
+
+def test_local_sentence_transformer_embedding_reports_missing_dependency(monkeypatch):
+    from rag_agent.embeddings import LocalSentenceTransformerEmbedding
+
+    def fake_import(name):
+        raise ImportError("missing")
+
+    monkeypatch.setattr("rag_agent.embeddings.import_module", fake_import)
+    embedding = LocalSentenceTransformerEmbedding(model_name="BAAI/bge-small-zh-v1.5")
+
+    try:
+        embedding.embed_query("hello")
+    except RuntimeError as exc:
+        assert "sentence-transformers" in str(exc)
+    else:
+        raise AssertionError("missing dependency should raise RuntimeError")

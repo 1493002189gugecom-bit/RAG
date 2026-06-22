@@ -7,7 +7,11 @@ import streamlit as st
 from rag_agent.agent import KnowledgeQAAgent
 from rag_agent.config import load_config
 from rag_agent.documents import load_builtin_documents
-from rag_agent.embeddings import HashEmbedding, OpenAICompatibleEmbedding
+from rag_agent.embeddings import (
+    HashEmbedding,
+    LocalSentenceTransformerEmbedding,
+    OpenAICompatibleEmbedding,
+)
 from rag_agent.llm import FakeLLM, OpenAICompatibleLLM
 from rag_agent.memory import ConversationMemory
 from rag_agent.retriever import InMemoryKnowledgeBase
@@ -31,17 +35,31 @@ def build_documents_from_uploads(uploaded_files) -> list[Document]:
     return documents
 
 
-def create_knowledge_base(documents: list[Document], use_api_embedding: bool):
+@st.cache_resource(show_spinner="正在加载本地 Embedding 模型，首次启动可能需要几十秒...")
+def get_local_embedding(model_name: str, device: str):
+    embedding = LocalSentenceTransformerEmbedding(model_name=model_name, device=device)
+    embedding.preload()
+    return embedding
+
+
+def create_embedding(backend: str):
     config = load_config()
-    embedding = (
-        OpenAICompatibleEmbedding(
+    if backend == "api":
+        return OpenAICompatibleEmbedding(
             api_key=config.embedding_api_key,
             model=config.embedding_model,
             base_url=config.embedding_base_url,
         )
-        if use_api_embedding
-        else HashEmbedding()
-    )
+    if backend == "local":
+        return get_local_embedding(
+            config.local_embedding_model,
+            config.local_embedding_device,
+        )
+    return HashEmbedding()
+
+
+def create_knowledge_base(documents: list[Document], embedding_backend: str):
+    embedding = create_embedding(embedding_backend)
     chunks = split_documents(documents, chunk_size=280, chunk_overlap=40)
     knowledge_base = InMemoryKnowledgeBase(embedding_model=embedding)
     knowledge_base.add_documents(chunks)
@@ -65,10 +83,13 @@ def initialize_state() -> None:
     if "messages" not in st.session_state:
         st.session_state.messages = []
     if "knowledge_base" not in st.session_state:
+        config = load_config()
         docs = load_builtin_documents()
-        kb, chunks = create_knowledge_base(docs, use_api_embedding=False)
+        backend = "local" if config.preload_local_embedding else "hash"
+        kb, chunks = create_knowledge_base(docs, embedding_backend=backend)
         st.session_state.knowledge_base = kb
         st.session_state.chunk_count = len(chunks)
+        st.session_state.embedding_backend = backend
 
 
 initialize_state()
@@ -95,19 +116,33 @@ else:
 with st.sidebar:
     st.subheader("知识库设置")
     st.write(f"当前知识块数量：{st.session_state.get('chunk_count', 0)}")
-    use_api_embedding = st.checkbox(
-        "使用 API Embedding",
-        value=False,
-        disabled=not config.embedding_api_ready,
-        help=(
-            "需要配置 EMBEDDING_API_KEY 和 EMBEDDING_BASE_URL。"
-            "DeepSeek Chat Key 不一定提供 Embedding endpoint。"
-        ),
+    backend_options = {
+        "本地混合检索（HashEmbedding）": "hash",
+        "本地 BGE Embedding": "local",
+        "API Embedding": "api",
+    }
+    default_backend = config.embedding_backend
+    default_label = next(
+        (label for label, value in backend_options.items() if value == default_backend),
+        "本地混合检索（HashEmbedding）",
     )
-    if not config.embedding_api_ready:
+    selected_backend_label = st.radio(
+        "Embedding 后端",
+        list(backend_options.keys()),
+        index=list(backend_options.keys()).index(default_label),
+        help="本地 BGE Embedding 首次加载模型较慢，加载后会缓存复用；API Embedding 调用外部向量接口。",
+    )
+    embedding_backend = backend_options[selected_backend_label]
+    if embedding_backend == "api" and not config.embedding_api_ready:
         st.caption(
             "尚未配置 API Embedding。系统仍会使用本地 HashEmbedding + BM25 + "
             "关键词匹配 + 编辑距离纠错进行混合检索。"
+        )
+        embedding_backend = "hash"
+    if embedding_backend == "local":
+        st.caption(
+            f"本地模型：{config.local_embedding_model}，设备：{config.local_embedding_device}。"
+            "首次加载后会缓存，后续重建知识库会复用。"
         )
     uploaded_files = st.file_uploader(
         "上传知识库文档（.txt / .md）",
@@ -124,12 +159,17 @@ with st.sidebar:
             if not documents:
                 st.warning("文档内容为空，请上传有效的 .txt 或 .md 文件。")
             else:
-                kb, chunks = create_knowledge_base(documents, use_api_embedding)
+                kb, chunks = create_knowledge_base(documents, embedding_backend)
                 st.session_state.knowledge_base = kb
                 st.session_state.chunk_count = len(chunks)
+                st.session_state.embedding_backend = embedding_backend
                 st.session_state.memory = ConversationMemory(max_turns=4)
                 st.session_state.messages = []
-                mode = "API Embedding" if use_api_embedding else "本地混合检索"
+                mode = {
+                    "api": "API Embedding",
+                    "local": "本地 BGE Embedding",
+                    "hash": "本地混合检索",
+                }[embedding_backend]
                 st.success(f"知识库已重建：共 {len(chunks)} 个知识块，检索模式：{mode}。")
         except Exception as exc:
             st.error(f"未能建立知识库：{exc}")

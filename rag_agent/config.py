@@ -12,6 +12,10 @@ class AppConfig:
     embedding_api_key: str
     embedding_base_url: str
     embedding_model: str
+    embedding_backend: str
+    local_embedding_model: str
+    local_embedding_device: str
+    preload_local_embedding: bool
     openai_base_url: str
     use_fake_llm: bool
 
@@ -47,6 +51,15 @@ def load_config() -> AppConfig:
         embedding_model=_get_setting(
             "EMBEDDING_MODEL", dotenv_values, "text-embedding-3-small"
         ),
+        embedding_backend=_get_setting("EMBEDDING_BACKEND", dotenv_values, "hash").lower(),
+        local_embedding_model=_get_setting(
+            "LOCAL_EMBEDDING_MODEL", dotenv_values, "BAAI/bge-small-zh-v1.5"
+        ),
+        local_embedding_device=_get_setting("LOCAL_EMBEDDING_DEVICE", dotenv_values, "auto"),
+        preload_local_embedding=_get_setting(
+            "PRELOAD_LOCAL_EMBEDDING", dotenv_values, "false"
+        ).lower()
+        == "true",
         openai_base_url=_get_setting(
             "OPENAI_BASE_URL", dotenv_values, "https://api.openai.com/v1"
         ),
