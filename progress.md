@@ -1,0 +1,32 @@
+# Progress
+
+## 2026-06-22
+- 读取用户提供的任务要求。
+- 检查工作目录，确认 `D:\RAG` 为空且不是 Git 仓库。
+- 确定从零搭建 Streamlit + LangChain 轻量 RAG 项目。
+- 创建规划文件：`task_plan.md`、`findings.md`、`progress.md`。
+- 创建核心测试：记忆、分块、检索、问答 Agent。
+- 运行 `pytest -q`，确认因 `rag_agent` 包不存在而失败，进入 TDD 红灯阶段。
+- 用户将课程方向从计算机网络改为 Python 语法。
+- 修改测试语料为 Python 语法，并新增文档加载、LLM 容错测试。
+- 运行 `pytest -q`，确认因 `rag_agent.documents` 和 `rag_agent.llm` 不存在而失败。
+- 创建文档加载、LLM 封装、配置模块和 Python 语法样例知识库。
+- 运行 `pytest -q`，确认 15 个测试通过。
+- 新增 Embedding 测试，运行 `pytest -q`，确认因 `rag_agent.embeddings` 不存在而失败。
+- 创建 Embedding 封装、Streamlit 入口、README、`.env.example`、依赖清单和实习报告模板。
+- 新增 `.env` 配置读取测试，先确认失败，再实现轻量 `.env` 解析。
+- 最终运行 `pytest -q`，结果为 19 个测试通过。
+- 运行 Python 编译检查，`app.py` 和 `rag_agent` 下所有 Python 文件通过。
+- 清理 `.pytest_cache` 和 `__pycache__` 生成缓存。
+- 用户确认提供的是 DeepSeek API Key。
+- 创建本地 `.env` 并将 `.env` 加入 `.gitignore`，避免密钥进入版本管理。
+- 增加 API 配置状态、BOM `.env` 解析、LLM 网络重试相关测试。
+- 真实调用 DeepSeek Chat API 成功。
+- 真实 RAG 冒烟测试通过：`list 和 tuple 有什么区别？`、`def 怎么定义函数？` 能基于知识库回答；库外问题会拒答。
+- 重启 Streamlit 服务，`http://localhost:8501` 返回 200。
+- 修复模糊查询问题：`Funtion 怎么定义？` 这类拼写错误 + 中英混合问题现在会召回函数知识点。
+- 增加查询归一化：英文近似纠错、中文“定义/函数/方法”等同义词扩展、列表/元组/字典映射。
+- 验证 `怎么维修电脑硬件？` 仍然拒答且不返回来源，避免模糊查询过度召回。
+- 配置智谱 `embedding-3` 作为真实 Embedding API，base URL 为 `https://open.bigmodel.cn/api/paas/v4`。
+- 验证智谱 Embedding API 调用成功，返回 2048 维向量。
+- 使用智谱 Embedding + DeepSeek Chat 验证上传类计算机网络文档，`计算机网络分几个层？` 能正确召回并回答 OSI 七层与 TCP/IP 四层。
