@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import time
 from dataclasses import dataclass
 from importlib import import_module
 from math import sqrt
+from pathlib import Path
 from urllib import request
 from urllib.error import URLError
 
@@ -117,14 +119,31 @@ class LocalSentenceTransformerEmbedding:
                 "Install it with: pip install sentence-transformers"
             ) from exc
 
+        resolve_path = self._resolve_model_path()
         device = None if self.device == "auto" else self.device
         sentence_transformer = module.SentenceTransformer
         self.model = (
-            sentence_transformer(self.model_name)
+            sentence_transformer(str(resolve_path))
             if device is None
-            else sentence_transformer(self.model_name, device=device)
+            else sentence_transformer(str(resolve_path), device=device)
         )
         return self.model
+
+    def _resolve_model_path(self) -> Path | str:
+        """Return a local path if the model exists in the project directory,
+        otherwise fall back to the HuggingFace model name."""
+        project_model = Path.cwd() / "models" / self.model_name.split("/")[-1]
+        if project_model.is_dir():
+            return project_model
+        cache_model = (
+            Path.home() / ".cache" / "huggingface" / "hub"
+            / f"models--{self.model_name.replace('/', '--')}" / "snapshots"
+        )
+        if cache_model.is_dir():
+            snaps = list(cache_model.iterdir())
+            if snaps:
+                return snaps[0]
+        return self.model_name
 
 
 def _tokenize(text: str) -> list[str]:
