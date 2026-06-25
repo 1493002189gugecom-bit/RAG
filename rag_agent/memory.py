@@ -26,6 +26,9 @@ class ConversationMemory:
             messages.append({"role": "assistant", "content": answer})
         return messages
 
+    def as_turns(self) -> list[tuple[str, str]]:
+        return list(self._turns)
+
     def format_for_prompt(self) -> str:
         if not self._turns:
             return "无"
