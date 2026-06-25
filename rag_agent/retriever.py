@@ -57,7 +57,12 @@ class InMemoryKnowledgeBase:
         self._rebuild_lexical_index()
 
     def expand_query(self, query: str) -> str:
+        focus_terms = _extract_focus_terms(query)
         tokens = _tokenize(query)
+        for term in focus_terms:
+            tokens.append(term)
+            tokens.extend(_tokenize(term))
+
         expanded: list[str] = []
         for token in tokens:
             expanded.append(token)
@@ -74,7 +79,7 @@ class InMemoryKnowledgeBase:
 
         expanded_query = self.expand_query(query)
         query_tokens = _tokenize(expanded_query)
-        query_vector = self.embedding_model.embed_query(expanded_query or query)
+        query_vector = self.embedding_model.embed_query(query)
 
         results: list[SearchResult] = []
         for index, (document, vector) in enumerate(zip(self._documents, self._vectors)):
@@ -175,9 +180,30 @@ def _cjk_tokens(text: str) -> list[str]:
 def _is_indexable_token(token: str) -> bool:
     if token in _STOPWORDS:
         return False
+    if token in _CJK_TECH_TERMS:
+        return True
     if token.isascii():
         return len(token) >= 3
     return len(token) >= 2
+
+
+def _extract_focus_terms(query: str) -> list[str]:
+    compact = re.sub(r"[\s，。？！?；;：:、]+", "", query.strip().lower())
+    if not compact:
+        return []
+
+    patterns = [
+        r"^(?:什么是|何为|解释一下|请解释|介绍一下)(?P<term>[\u4e00-\u9fffa-zA-Z0-9_]+)$",
+        r"^(?P<term>[\u4e00-\u9fffa-zA-Z0-9_]+)(?:是什么|是啥|什么意思|的定义|指什么)$",
+    ]
+    terms: list[str] = []
+    for pattern in patterns:
+        match = re.match(pattern, compact)
+        if match:
+            term = match.group("term")
+            if term and term not in _STOPWORDS:
+                terms.append(term)
+    return terms
 
 
 def _correct_term_from_vocabulary(term: str, vocabulary: set[str]) -> str:
@@ -199,9 +225,18 @@ def _correct_term_from_vocabulary(term: str, vocabulary: set[str]) -> str:
 
 def _domain_synonyms(tokens: list[str]) -> list[str]:
     joined = " ".join(tokens)
+    token_set = set(tokens)
     synonyms: list[str] = []
     if any(keyword in joined for keyword in ["\u5b9a\u4e49", "\u51fd\u6570", "\u65b9\u6cd5"]):
         synonyms.extend(["def", "function"])
+    if "\u7c7b" in token_set:
+        synonyms.extend(["class", "object"])
+    if "\u5bf9\u8c61" in token_set:
+        synonyms.append("object")
+    if "\u5c5e\u6027" in token_set:
+        synonyms.append("attribute")
+    if "\u65b9\u6cd5" in token_set:
+        synonyms.append("method")
     if "\u533a\u522b" in joined:
         synonyms.extend(["difference", "compare"])
     if "\u5217\u8868" in joined:
@@ -262,4 +297,8 @@ _STOPWORDS = {
     "\u5982\u4f55",
     "\u6709\u4ec0\u4e48",
     "\u4f5c\u7528",
+}
+
+_CJK_TECH_TERMS = {
+    "\u7c7b",
 }

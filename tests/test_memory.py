@@ -16,6 +16,14 @@ def test_memory_keeps_recent_turns_only():
     ]
 
 
+def test_memory_exposes_recent_questions_for_contextual_retrieval():
+    memory = ConversationMemory(max_turns=3)
+    memory.add_turn("对象是什么", "对象是类创建出来的实例。")
+    memory.add_turn("类是什么", "类是对象的模板。")
+
+    assert memory.recent_questions(limit=2) == ["对象是什么", "类是什么"]
+
+
 def test_memory_ignores_blank_turns():
     memory = ConversationMemory(max_turns=3)
 

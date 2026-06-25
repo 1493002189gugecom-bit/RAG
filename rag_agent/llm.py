@@ -15,7 +15,7 @@ class FakeLLM:
         marker = "[片段 1]"
         if marker in prompt:
             context = prompt.split(marker, 1)[1].strip().split("\n\n[片段", 1)[0].strip()
-            header_index = context.rfind("\n## ")
+            header_index = context.find("\n## ")
             if header_index != -1:
                 context = context[header_index:].strip()
             return f"测试模式回答：{context}"

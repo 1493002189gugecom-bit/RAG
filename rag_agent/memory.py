@@ -29,6 +29,9 @@ class ConversationMemory:
     def as_turns(self) -> list[tuple[str, str]]:
         return list(self._turns)
 
+    def recent_questions(self, limit: int = 2) -> list[str]:
+        return [question for question, _ in self._turns[-limit:]]
+
     def format_for_prompt(self) -> str:
         if not self._turns:
             return "无"

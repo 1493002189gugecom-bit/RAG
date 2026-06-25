@@ -4,7 +4,7 @@ from rag_agent.retriever import InMemoryKnowledgeBase
 
 
 class KeywordEmbedding:
-    keywords = ["list", "tuple", "dict", "function", "python"]
+    keywords = ["list", "tuple", "dict", "function", "python", "class", "object"]
 
     def embed_documents(self, texts):
         return [self._embed(text) for text in texts]
@@ -43,6 +43,28 @@ def test_retriever_uses_fuzzy_match_when_embedding_score_is_zero():
 
     assert len(results) == 1
     assert results[0].document.metadata["source"] == "function.md"
+
+
+def test_retriever_handles_chinese_definition_questions_for_short_terms():
+    kb = InMemoryKnowledgeBase(embedding_model=KeywordEmbedding())
+    kb.add_documents(
+        [
+            Document(
+                page_content="类 class 用于定义对象的属性和方法。",
+                metadata={"source": "class.md"},
+            ),
+            Document(
+                page_content="Python list 是可变序列。",
+                metadata={"source": "list.md"},
+            ),
+        ]
+    )
+
+    for query in ["类是什么", "什么是类"]:
+        results = kb.search(query, k=1)
+
+        assert len(results) == 1
+        assert results[0].document.metadata["source"] == "class.md"
 
 
 def test_retriever_handles_empty_store():

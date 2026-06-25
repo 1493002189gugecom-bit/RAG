@@ -4,10 +4,33 @@ from rag_agent.llm import FakeLLM, OpenAICompatibleLLM
 def test_fake_llm_returns_contextual_answer():
     llm = FakeLLM()
 
-    answer = llm.generate("知识库片段：\n[片段 1]\nPython list 是可变序列。\n\n用户问题：list 是什么？")
+    answer = llm.generate(
+        "知识库片段：\n"
+        "[片段 1]\n"
+        "Python list 是可变序列。\n\n"
+        "用户问题：list 是什么？"
+    )
 
     assert "测试模式回答" in answer
     assert "Python list 是可变序列" in answer
+
+
+def test_fake_llm_uses_first_heading_inside_a_retrieved_chunk():
+    llm = FakeLLM()
+
+    answer = llm.generate(
+        "知识库片段：\n"
+        "[片段 1]\n"
+        "上一节尾部。\n\n"
+        "## 类与对象\n"
+        "类 class 用于定义对象。\n\n"
+        "## 列表推导式\n"
+        "列表推导式用于生成列表。\n\n"
+        "[片段 2]\n"
+        "其他片段。"
+    )
+
+    assert answer.startswith("测试模式回答：## 类与对象")
 
 
 def test_openai_compatible_llm_requires_api_key():
