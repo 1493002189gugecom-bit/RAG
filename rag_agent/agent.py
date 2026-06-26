@@ -17,6 +17,7 @@ class QAResponse:
     answer: str
     sources: list[str]
     contexts: list[str]
+    scores: list[float] | None = None
 
 
 class KnowledgeQAAgent:
@@ -51,6 +52,15 @@ class KnowledgeQAAgent:
         results = _rerank_contextual_results(context_subjects, results)
         results = results[: self.top_k]
 
+        # LLM disambiguation: if retrieval failed, try rewriting the query
+        # to fix typos / errors that the rule-based retriever can't handle.
+        if not results:
+            disambiguated = self._disambiguate_with_llm(retrieval_query)
+            if disambiguated:
+                results = self.knowledge_base.search(disambiguated, k=search_k)
+                results = _rerank_contextual_results(context_subjects, results)
+                results = results[: self.top_k]
+
         if not results:
             return QAResponse(
                 answer="知识库中未找到与问题相关的内容，请补充资料后再提问。",
@@ -59,11 +69,37 @@ class KnowledgeQAAgent:
             )
 
         contexts = [result.document.page_content for result in results]
+        scores = [result.score for result in results]
         sources = _unique_sources(results)
         prompt = self._build_prompt(question, contexts, resolved_question)
         answer = self.llm.generate(prompt).strip()
         self.memory.add_turn(question, answer)
-        return QAResponse(answer=answer, sources=sources, contexts=contexts)
+        return QAResponse(
+            answer=answer,
+            sources=sources,
+            contexts=contexts,
+            scores=scores,
+        )
+
+    def _disambiguate_with_llm(self, query: str) -> str | None:
+        """Use LLM to rewrite a failed query into something the retriever
+        can work with.  Returns None when the LLM is unavailable, the
+        output is garbage, or the query had no errors worth fixing."""
+        try:
+            result = self.llm.generate(
+                _DISAMBIGUATE_PROMPT.format(query=query)
+            ).strip()
+            if not result or result == query:
+                return None
+            # Guard against spam / fake LLM: rewrite must share at least
+            # one 2-gram with the original query.
+            orig_bigrams = {query[i : i + 2] for i in range(len(query) - 1)}
+            result_bigrams = {result[i : i + 2] for i in range(len(result) - 1)}
+            if not (orig_bigrams & result_bigrams):
+                return None
+            return result
+        except Exception:
+            return None
 
     def _build_prompt(
         self, question: str, contexts: list[str], resolved_question: str | None = None
@@ -309,3 +345,10 @@ _TERM_ALIASES = {
     "字符串": ["str"],
     "模块": ["module"],
 }
+
+_DISAMBIGUATE_PROMPT = """修正用户问题中的拼写错误和错别字，突出核心关键词，
+使问题更适合知识库检索。不要添加问题中没有的新信息，不要回答问题。
+直接输出改写后的结果，不要任何解释。
+
+用户问题：{query}
+改写后："""

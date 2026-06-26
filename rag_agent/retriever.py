@@ -278,6 +278,19 @@ def _edit_distance_score(query_tokens: list[str], document_tokens: list[str]) ->
     return sum(best_scores) / len(best_scores)
 
 
+def highlight_terms(text: str, query: str) -> str:
+    """将 query 中的关键词在 text 中用 **粗体** 标记。
+
+    用于在 UI 中展示检索命中的位置。复用 _tokenize 和 _is_indexable_token
+    来确定哪些词值得标注。
+    """
+    tokens = _tokenize(query)
+    for token in sorted(set(tokens), key=len, reverse=True):
+        if _is_indexable_token(token):
+            text = text.replace(token, f"**{token}**")
+    return text
+
+
 _STOPWORDS = {
     "a",
     "an",
